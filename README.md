@@ -12,3 +12,11 @@
 [ArViz](https://arviz-devs.github.io/arviz/index.html)
 
 This is a repository of my notes on the Stan User Guide and the Python libraries used to interface with Stan.
+
+---
+
+## Notes
+
+### Part 1. Example Models
+
+[Ch 1. Regression Models](notebooks/p1_example-models/ch01_regression-models.md)
