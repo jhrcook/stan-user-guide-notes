@@ -382,30 +382,30 @@ az.summary(az_logreg_fit)
   <tbody>
     <tr>
       <th>alpha</th>
-      <td>5.746</td>
-      <td>1.530</td>
-      <td>3.045</td>
-      <td>8.546</td>
-      <td>0.059</td>
-      <td>0.044</td>
-      <td>666.0</td>
-      <td>602.0</td>
-      <td>725.0</td>
-      <td>651.0</td>
-      <td>1.01</td>
+      <td>5.670</td>
+      <td>1.468</td>
+      <td>3.007</td>
+      <td>8.331</td>
+      <td>0.051</td>
+      <td>0.037</td>
+      <td>818.0</td>
+      <td>803.0</td>
+      <td>835.0</td>
+      <td>1029.0</td>
+      <td>1.00</td>
     </tr>
     <tr>
       <th>beta</th>
-      <td>-1.158</td>
-      <td>0.296</td>
-      <td>-1.716</td>
-      <td>-0.656</td>
-      <td>0.012</td>
-      <td>0.009</td>
-      <td>633.0</td>
-      <td>517.0</td>
-      <td>697.0</td>
-      <td>674.0</td>
+      <td>-1.139</td>
+      <td>0.284</td>
+      <td>-1.661</td>
+      <td>-0.651</td>
+      <td>0.010</td>
+      <td>0.007</td>
+      <td>812.0</td>
+      <td>800.0</td>
+      <td>823.0</td>
+      <td>967.0</td>
       <td>1.01</td>
     </tr>
   </tbody>
@@ -427,11 +427,11 @@ m_logreg_fit
     post-warmup draws per chain=1000, total post-warmup draws=4000.
     
             mean se_mean     sd   2.5%    25%    50%    75%  97.5%  n_eff   Rhat
-    alpha   5.75    0.06   1.53   3.19   4.71   5.58   6.64   9.05    675   1.01
-    beta   -1.16    0.01    0.3  -1.82  -1.33  -1.12  -0.95  -0.67    653   1.01
-    lp__  -17.29    0.04   1.12 -20.28 -17.72 -16.95  -16.5 -16.21    625   1.01
+    alpha   5.67    0.05   1.47   3.21   4.63   5.48   6.58   9.21    811    1.0
+    beta   -1.14    0.01   0.28   -1.8  -1.32   -1.1  -0.94  -0.68    805    1.0
+    lp__  -17.24    0.03   1.06 -20.12 -17.67 -16.92  -16.5 -16.21   1095   1.01
     
-    Samples were drawn using NUTS at Wed Aug 19 08:33:14 2020.
+    Samples were drawn using NUTS at Fri Aug 21 08:16:37 2020.
     For each parameter, n_eff is a crude measure of effective sample size,
     and Rhat is the potential scale reduction factor on split chains (at 
     convergence, Rhat=1).
@@ -596,7 +596,219 @@ However, since it is more difficult to read, this modification should only be ma
 
 ## 1.12 Priors for Identifiability
 
-To-do
+Often, setting a standard normal $N(0,1)$ prior for a parameter can help stabilize the model and resolve non-identifiability.
+This can also help with colinear predictors.
+
+## 1.13 Multivariate Priors for Hierarchical Models
+
+An example from Gelman and Hill (2007) was used to illustrate the concept of including priors in hierarchical models.
+
+### Multivariate Regression Example
+
+There are $N$ individuals organized into $J$ groups.
+Each individual has a predictor row $x_n$ of size $K$ and $x_{n,1}$ is a fixed "intercept" predictor.
+Group membership is incoded such that $jj[n] \in \{1, \dots, J\}$.
+Each individual $n$ also has an observed outcome $y_n$ taking on real values.
+
+### Likelihood
+
+The model is a linear regression with slopes and intercepts varying by group.
+
+$$
+y_n \sim N(x_n \beta_{jj[n]}, \sigma) \quad \text{for} \quad n \in {1, \dots, N}
+$$
+
+### Coefficient Prior
+
+The coefficient vectors $\beta_j$ are drawn from a multivariate distribution with mean vector $\mu$ and covraiance matrix $\Sigma$.
+
+$$
+\beta_j \sim \text{multivariate normal}(\mu_j, \Sigma) \quad \text{for} \quad j \in \{1, \dots, J\}
+$$
+
+Later, $\mu$ will be estiamted from the data, but for now we will assume $\mu$ is a simple vector parameter.
+
+### Hyperpriors
+
+$\mu$ and $\Sigma$ must also be given priors.
+The group-level mean vector can be given a weeakly-informative prior.
+If more is known about the expected values for $\beta_{j,k}$, this can be incorporated into the prior for $\mu_j$
+
+$$
+\mu_j \sim N(0,5)
+$$
+
+The coevariance matrix can be decomposed into a scale and a matrix where $\Omega$ is a correlation matrix and $\tau$ is the vector of coefficient scales.
+
+$$
+\Sigma = \text{diag_matrix}(\tau) \times \Omega \times \text{diag_matrix}(\tau)
+$$
+
+The mapping from scale vector $\tau$ and correlation matrix $\Omega$ can be inverted.
+
+$$
+\tau_k = \sqrt{\Sigma_{k,k}} \quad \text{and} \quad \Omega_{i,j} = \frac{\Sigma_{i,j}}{\tau_i \tau_j}
+$$
+
+The Stan developers recommend using a weakly informative prior such as the half-Cauchy with a small scale.
+
+$$
+\tau_k \sim Cauchy(0, 2.5) \quad \text{for} \quad k \in \{1, \dots, K\} \quad \text{constrained by} \quad \tau_k > 0
+$$
+
+The Stan developers also recommend the LKJ prior with shape $\eta \geq 1$ for $\Omega$.
+
+$$
+\Omega \sim \text{LKJCorr}(\eta)
+$$
+
+The LKJ correlation distribution is defined below.
+When $\eta = 1$, the distribution is uniform, though the marginal distribution over the matrix is not uniform, but instead concentrates around 0.
+For $\eta > 1$, the mass concentrated around the unit matrix, favoring less correlation.
+For $\eta < 1$, more correlation is favored.
+Therefore, the LKJ prior can be used to incorporate the expected amount of correlation among parameters $\beta_j$.
+
+$$
+\text{LKJCorr}(\Sigma | \eta) \propto \operatorname{det}(\Sigma)^{\eta - 1}
+$$
+
+### Group-Level Predictors for Prior Mean
+
+Suppose each group $j \in \{1, \dots, J\}$ is supplied with an $L$-dimensional row-vector of group-level predictors $u_j$.
+*Thus, the prior mean for the $\beta_j$ can be modeled as a regression using an $L$-dimensional coefficient vector $\gamma$.*
+Then the prior for the group-level coefficients is below.
+
+$$
+\beta_j \sim \text{multivariate normal}(u_j \gamma, \Sigma)
+$$
+
+The group-level coefficients must be given a prior, such as a weakly informative normal distribution.
+
+$$
+\gamma_l \sim N(0, 5)
+$$
+
+### Coding the Model in Stan
+
+```c
+data {
+    int<lower=0> N;               // num of individuals
+    int<lower=1> K;               // num of individual predictors
+    int<lower=1> J;               // num of groups
+    int<lower=1> L;               // num of group predictors
+    int<lower=1, upper=J> jj[N];  // group for individual
+    matrix[N, K] x;               // individual predictors
+    row_vector[L] u[J];           // group predictors
+    vector[N] y;                  // outcomes
+}
+
+parameters {
+    corr_matrix[K] Omega;    // prior correlation
+    vector<lower=0>[K] tau;  // prior scale
+    matrix[L,K] gamma;       // group coefficients
+    vector[K] beta[J];       // individual coefficients by group
+    real<lower=0> sigma;     // prediction error scale
+}
+
+model {
+    // Hyper priors
+    tau ~ cauchy(0, 2.5);
+    Omega ~ lkj_corr(2);
+    to_vector(gamma) ~ normal(0, 5);
+    
+    // Group-level model
+    {
+        row_vector[K] u_gamma[J];
+        for (j in 1:J)
+            u_gamma[j] = u[j] * gamma;
+        beta ~ multi_normal(u_gamma, quad_form_diag(Omega, tau));
+    }
+    
+    // Individual-level model
+    for (n in 1:N)
+        y[n] ~ normal(x[n] * beta[jj[n]], sigma);
+}
+```
+
+The function `quad_form_diag()` is defined such that `quad_form_diag(Sigma, tau)` is equivalent to `diag_matrix(tau) * Sigma * diag_matrix(tau)`.
+The version using `quad_form_diag()` should be faster, though.
+
+### Optimization through Vectorization
+
+Replace 
+
+```c
+for (n in 1:N)
+    y[n] ~ normal(x[n] * beta[jj[n]], sigma);
+```
+
+with 
+
+```c
+{
+    vector[N] x_beta_jj;
+    for (n in 1:N) 
+        x_beta_jj[n] = x[n] * beta[jj[n]];
+    y ~ normal(x_beta_jj, sigma);
+}
+```
+
+The vector `x_beta_jj` is only defined in a local scope and will not be saved.
+This is more efficient because the log of sigma is only taken once
+
+## 1.14 Prediction, Forecasting, and Backcasting
+
+### Programming Predictions
+
+The following linear regression is used as an example.
+
+```c
+data {
+    int<lower=0> K;
+    int<lower=N> N;
+    matrix[N, K] x;
+    vector[N] y;
+    
+    int<lower=0> N_new;      // num of predictions to make per new data point
+    matrix[N_new, K] x_new;  // data to predict on
+}
+
+parameters {
+    vector[K] beta;
+    real<lower=0> sigma;
+    
+    vector[N_new] y_new;    // predictions
+}
+
+model {
+    y ~ normal(x * beta, sigma);          // observed model
+    
+    y_new ~ normal(x_new * beta, sigma);  // prediction model
+}
+```
+
+It is more efficient and effective to make the predictions in the `generated quantities` block.
+
+```c
+data {
+    ...
+}
+
+parameters {
+    vector[K] beta;
+    real<lower=0> sigma;
+}
+
+model {
+    y ~ normal(x * beta, sigma);
+}
+
+generated quantities {
+    vector[N_new] y_new;
+    for (n in 1:N_new)
+        y_new[n] = normal_rng(x_new[n] * beta, sigma);
+}
+```
 
 
 ```python
